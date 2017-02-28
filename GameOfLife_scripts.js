@@ -2,14 +2,15 @@
 TODOs:
 	UX
 		Improve overall L&F
+		Make canvas react to screen size
+		Make music play immediately
 	Controls
 		Allow user to "draw" seed
 		Randomize seed
-			User-defined sparsity of live cells
+			What happens when a user randomizes an active game?
 		Save board states to file
 			Read them back in
 	Code org
-		Create additional var for boardDim
 	Misc
 		Detect when stable state has been reached
 		Explore Game variations 
@@ -20,27 +21,33 @@ Done:
 			Pause music when game is paused
 		Play/Pause by space bar
 		Play/Pause by screen click
+		Add "Mute/Unmute" button
 	Controls
 		Randomize seed
+			Clear old state before randomizing board
+			User-defined sparsity of live cells
 		Control speed
+			Allow user to change speed on the fly
 		Reuse buttons (Step)
 		Generation counter
 	Code org
 		Comment all functions
+		Create additional var for boardDim
 */
 
-// Globals 
+/// Globals ///
 var gameBoard = null;
-var boardDim = 110; // leave a padding of 5 on each side
-var pixelsPerSide = 5;
-var drawSpace = null;
-var audio = null;
-var generation = 0;
-var speed = 80;
-var delay = 5;
-var isPaused = false;
+var boardDim = 110; // leave a padding of 5 on each side of the visibile board
+var pixelsPerSide = 5; // Number of pixels "tall" and "wide" each cell is
+var drawSpace = null; // Holds HTML canvas context
+var audio = null; // Used to load and play background music
+var generation = 0; // How many iterations of the Game have been played
+var speed = 80; // delay is calculated off this
+var delay = 5; // Used to determine how many milliseconds to pause between generations
+var isPaused = false; // Is the game paused?
+var isMuted = false; // Is the background music muted?
 var game = null;
-// The initial pattern (seed)
+/// The initial pattern (seed) ///
 // (Uncomment the seed that you want to test)
 //seed = [[50,49], [50,50], [50,51]]; // "Blinker"
 //seed = [[3,1], [3,2], [3,3], [2,2], [2,3], [2,4]]; // "Toad"
@@ -57,48 +64,34 @@ seed = [[47,51], [48,51], [48,53], [49,51], [49,52], [50,48], [51,49], [51,50], 
  * Sets up some key variables that will be used later:
  *     drawSpace: DOM handle for the actual html drawing area
  *     gameBoard: A 2d array of ints that represents live and dead cells in the Game of Life
- *     generation: How many iterations of the Game have been played
  * Seeds gameBoard with some live cells, and then draws the seed on the drawSpace.
  *
- * @param {number} boardDim The length (in cells) of one side of the gameBoard; this 
- *            dimension is used for both sides of the board, because all boards are square
- * @param {number} pixelsPerSide The pixel height of each cell on the gameBoard
  * @return gameBoard Handle for the internal 2d array that handles live and dead cells
  */
-function setUpGameBoard() {
-	// Get audio ready
-	audio = new Audio("SmoothMcGroove_Zelda_DekuPalace.mp3");
-	// Connect vars to the DOM
-	htmlCanvasElement = document.getElementById("board");
-	drawSpace = htmlCanvasElement.getContext("2d");
-	// Give user play/pause functionality (space bar and canvas click)
-	document.onkeydown = function(key) { if (key.keyCode == 32) playPause(); };
-	htmlCanvasElement.addEventListener("click", playPause);
-	// Set play speed
-	delay = 1000 - (speed*10);
-	document.getElementById("speed").innerHTML = speed;
-	// Set up the internal 2d array and initialize it 
-	//gameBoard = new Array(boardDim).fill(new Array(boardDim).fill(0));
-	gameBoard = new Array(boardDim);
-	for(i=0; i<boardDim; i++) {
-		gameBoard[i] = new Array(boardDim);
-		for(j=0; j<boardDim; j++) 
-			gameBoard[i][j] = 0;
+function setUpGameBoard(onLoad=true) {
+	if (onLoad) {
+		// Get audio ready
+		audio = new Audio("SmoothMcGroove_Zelda_DekuPalace.mp3");
+		// Connect vars to the DOM
+		htmlCanvasElement = document.getElementById("board");
+		drawSpace = htmlCanvasElement.getContext("2d");
+		// Give user play/pause functionality (space bar and canvas click)
+		document.onkeydown = function(key) { if (key.keyCode == 32) playPause(); };
+		htmlCanvasElement.addEventListener("click", playPause);
+		// Set play speed
+		delay = 1000 - (speed*10);
+		document.getElementById("speed").innerHTML = speed;
+		// Set up the internal 2d array and initialize it 
+		gameBoard = new Array(boardDim);
+		for(i=0; i<boardDim; i++) {
+			gameBoard[i] = new Array(boardDim).fill(0);
+		}
 	}
 	// Populate gameBoard with the seed
 	for(i=0; i<seed.length; i++) {
-		gameBoard[seed[i][0]][seed[i][1]] = 1;
+		gameBoard[seed[i][0]][seed[i][1]] = 2;
 	}
-	// Draw the seed
-	for(i=0; i<seed.length; i++) {
-		x = (seed[i][0]-5) * pixelsPerSide;
-		y = (seed[i][1]-5) * pixelsPerSide;
-		drawSpace.fillRect(x,y,pixelsPerSide,pixelsPerSide);
-	}
-	// Change the button behaviour and return the board
-	setUpButton = document.getElementById("setUp");
-	setUpButton.onclick = transitionBoard;
-	setUpButton.innerHTML = "Step";
+	updateCanvas();
 }
 
 /**
@@ -119,6 +112,20 @@ function pauseButton() {
 	audio.pause(); 
 	clearTimeout(game);
 	isPaused = true;
+}
+
+/**
+ * Handle the "Mute/Unmute" button.
+ */
+function muteButton() {
+	if (isMuted) {
+		audio.muted = false; 
+		isMuted = false;
+	}
+	else {
+		audio.muted = true; 
+		isMuted = true;
+	}
 }
 
 /**
@@ -148,11 +155,6 @@ function transitionBoard() {
  * born, then its value is changed to 2. This is done because otherwise, when a cell looks at 
  * its neighbors, an earlier cell transformation could affect the count of how many neighbors 
  * the current cell has. As a side benefit, updateCanvas only has to redraw -1's and 2's.
- *
- * @param gameBoard The internal 2d array that handles live and dead cells
- * @param {number} boardDim The length (in cells) of one side of the gameBoard
- * @return gameBoard This is returned for formality; the gameBoard that is passed in actually
- *             changes
  */
 function transformBoard() {
 	for(col=0; col<boardDim; col++) {
@@ -195,11 +197,6 @@ function transformBoard() {
  * Checks each cell in gameBoard. If the cell is -1, then this erases the corresponding 
  * square on drawSpace, and changes the cell to 0. If the cell is 2, then this draws the 
  * corresponding square on drawSpace, and changes the cell to 1.
- *
- * @param gameBoard The internal 2d array that handles live and dead cells
- * @param {number} boardDim The length (in cells) of one side of the gameBoard
- * @param {number} pixelsPerSide The pixel height of each cell on the gameBoard
- * @param drawSpace Html DOM handle for the drawing area
  */
 function updateCanvas() {
 	for(col=5; col<boardDim-5; col++) {
@@ -227,28 +224,48 @@ function updateCanvas() {
 /**
  * Changes the speed of the transitionBoard loop, by transforming a user-defined speed into 
  * an equivalent delay. This interacts with the DOM in a way that allows the speed to be 
- * changed either:
- *    1) immediately after the page launches.
- *    2) after painting and/or altering the seed.
- *    3) during program execution (to do this, pause execution, change speed, then restart).
+ * changed at any time (including while a game is active)
  */
 function setSpeed() {
-	speed = prompt("Enter the time delay in milliseconds\n(enter a number between 0 and 99)", 80);
-	delay = 1000 - (speed*10);
-	document.getElementById("speed").innerHTML = speed;
+	pauseButton();
+	speed = prompt("Enter the speed factor \n(a number between 0 and 100)", 80);
+	if (speed.isNaN) {
+		alert("Invalid input (speed is unchanged)");
+	}
+	else {
+		delay = 1000 - (speed*10);
+		document.getElementById("speed").innerHTML = speed;
+	}
+	playButton();
 }
 
 /**
- * Creates a random seed.
+ * Clears the board, then creates and draws a random seed.
  */
 function randomizeBoard() {
-	sparcityFactor = .2;
+	var sparcityFactor = confirm("This action will reset your game. Is that ok?");
+	if (!sparcityFactor)
+		return;
+	sparcityFactor = prompt("How dense would you like the live cells?\n(enter a percentage between 0 and 100)", 20);
+	if (sparcityFactor.isNaN) {
+		alert("Invalid input (the board is unchanged)");
+		return;
+	}
+	// Transform sparcityFactor from a percentage to a scalar
+	sparcityFactor /= 100;
+	// Clear the board
+	for(i=0; i<boardDim; i++) {
+		gameBoard[i] = new Array(boardDim);
+		for(j=0; j<boardDim; j++) 
+			gameBoard[i][j] = -1;
+	}
+	// This is where the magic happens
 	for(col=0; col<boardDim; col++) {
 		for(row=0; row<boardDim; row++) {
-			toMakeLive = Math.random();
-			if(toMakeLive<sparcityFactor)
-				seed.push([col,row]);
+			var toMakeLive = Math.random();
+			if (toMakeLive < sparcityFactor)
+				gameBoard[col][row] = 2;
 		}
 	}
-	setUpGameBoard(boardDim, pixelsPerSide);
+	updateCanvas();
 }
