@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <script src="https://ajax.aspnetcdn.com/ajax/jQuery/jquery-3.4.1.min.js"></script>
   <script src="GameOfLife_scripts.js"></script>
 </head>
 <body onload="setUpGameBoard()">
@@ -9,7 +10,7 @@
 	Oh no! Your browser does not support the HTML5 canvas protocol.
   </canvas>
   <br/>
-  <p id="textDisplayArea">Click a button below</p>
+  <p id="textDisplayArea">Click a button below, or click the screen to start</p>
   <button onclick="transitionBoard()">Step</button>
   <button onclick="randomizeBoard()">Randomize seed</button>
   <button onclick="setSpeed()">Set Speed</button>
@@ -18,5 +19,6 @@
   <button onclick="playPause()">Start/Pause</button>
   <button onclick="muteButton()">Mute/Unmute</button>
   <button onclick="window.location.reload(false)">Reset</button>
+  <span id="stableStateReached"></span>
 </body>
 </html>

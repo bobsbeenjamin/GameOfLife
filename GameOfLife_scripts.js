@@ -9,7 +9,6 @@ TODOs:
 		Save board states to file
 			Read them back in
 	Misc
-		Detect when stable state has been reached
 		Explore Game variations 
 Done:
 	UX
@@ -32,20 +31,24 @@ Done:
 		Create additional var for boardDim
 	Misc
 		Handle edge of board gracefully
+		Detect when stable state has been reached
 */
 
 /// Globals ///
-var gameBoard = null;
 var boardDim = 100 + 10; // leave a padding of 5 on each side of the visibile board
 var pixelsPerSide = 5; // Number of pixels "tall" and "wide" each cell is
+var gameBoard = null; // Holds all the actual numbers
 var drawSpace = null; // Holds HTML canvas context
+var gameBoard_prevGeneration = null;
+var gameBoard_2GenerationsBack = null;
+var stableStateReached = false;
 var audio = null; // Used to load and play background music
 var generation = 0; // How many iterations of the Game have been played
 var speed = 80; // delay is calculated off this
 var delay = 5; // Used to determine how many milliseconds to pause between generations
 var isPaused = true; // Is the game paused?
 var isMuted = false; // Is the background music muted?
-var game = null;
+var gameLoop = null;
 /// The initial pattern (seed) ///
 // (Uncomment the seed that you want to test)
 //seed = [[50,49], [50,50], [50,51]]; // "Blinker"
@@ -98,7 +101,7 @@ function setUpGameBoard(onLoad=true) {
  */
 function playButton() {
 	audio.play();
-	game = setInterval(function() {
+	gameLoop = setInterval(function() {
 		transitionBoard()
 		}, delay);
 	isPaused = false;
@@ -109,7 +112,7 @@ function playButton() {
  */
 function pauseButton() {
 	audio.pause(); 
-	clearTimeout(game);
+	clearTimeout(gameLoop);
 	isPaused = true;
 }
 
@@ -156,6 +159,7 @@ function transitionBoard() {
  * the current cell has. As a side benefit, updateCanvas only has to redraw -1's and 2's.
  */
 function transformBoard() {
+	// Transform the current board
 	for(let col=0; col<boardDim; col++) {
 		for(let row=0; row<boardDim; row++) {
 			/// Count the live neighbors ///
@@ -163,8 +167,7 @@ function transformBoard() {
 			for(let i=col-1; i<col+2; i++) {
 				for(let j=row-1; j<row+2; j++) {
 					if(i<0 || j<0 || i>=boardDim || j>=boardDim || (i==col && j==row)) {
-						// This square is either outside the board or is the current square, 
-						// so skip it
+						// This square is either outside the board or is the current square, so skip it
 					}
 					else {
 						if(gameBoard[i][j]==1 || gameBoard[i][j]==-1) {
@@ -191,6 +194,18 @@ function transformBoard() {
 		}
 	}
 	generation += 1;
+	// Stable state was previously reached, so need to run all the stable state logic below
+	if(stableStateReached)
+		return;
+	// Check for stable state
+	tempGameBoard = JSON.stringify(gameBoard); // stringify gives fairly fast copy and compare runtimes
+	if(tempGameBoard == gameBoard_2GenerationsBack) {
+		document.getElementById("stableStateReached").innerHTML = "Stable state reached at " + (generation - 1) + " generations";
+		stableStateReached = true;
+	}
+	// Copy gameBoard for future checks
+	gameBoard_2GenerationsBack = gameBoard_prevGeneration;
+	gameBoard_prevGeneration = tempGameBoard;
 }
 
 /**
