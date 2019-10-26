@@ -6,15 +6,11 @@ TODOs:
 		Make music play immediately
 	Controls
 		Allow user to "draw" seed
-		Randomize seed
-			What happens when a user randomizes an active game?
 		Save board states to file
 			Read them back in
-	Code org
 	Misc
 		Detect when stable state has been reached
 		Explore Game variations 
-		*Handle edge of board gracefully
 Done:
 	UX
 		Play background music
@@ -26,6 +22,7 @@ Done:
 		Randomize seed
 			Clear old state before randomizing board
 			User-defined sparsity of live cells
+			What happens when a user randomizes an active game? (Answer: What you would expect)
 		Control speed
 			Allow user to change speed on the fly
 		Reuse buttons (Step)
@@ -33,18 +30,20 @@ Done:
 	Code org
 		Comment all functions
 		Create additional var for boardDim
+	Misc
+		Handle edge of board gracefully
 */
 
 /// Globals ///
 var gameBoard = null;
-var boardDim = 110; // leave a padding of 5 on each side of the visibile board
+var boardDim = 100 + 10; // leave a padding of 5 on each side of the visibile board
 var pixelsPerSide = 5; // Number of pixels "tall" and "wide" each cell is
 var drawSpace = null; // Holds HTML canvas context
 var audio = null; // Used to load and play background music
 var generation = 0; // How many iterations of the Game have been played
 var speed = 80; // delay is calculated off this
 var delay = 5; // Used to determine how many milliseconds to pause between generations
-var isPaused = false; // Is the game paused?
+var isPaused = true; // Is the game paused?
 var isMuted = false; // Is the background music muted?
 var game = null;
 /// The initial pattern (seed) ///
@@ -55,8 +54,8 @@ var game = null;
 //seed = [[25,26], [26,27], [27,25], [27,26], [27,27], [50,50], [50,51], [51,50], [52,53], [53,52], [53,53]]; // "Glider" collides with "Beacon" and explodes
 //seed = [[50,40], [50,44], [50,45], [50,46], [51,39], [51,40], [52,45]]; // "Diehard"
 //seed = [[40,40], [42,40], [42,41], [44,42], [44,43], [44,44], [46,43], [46,44], [46,45], [47,44]]; // Infinite growth
-//seed = [[49,49], [50,48], [50,49], [50,50], [51,50]]; // "R-pentomino"
-seed = [[47,51], [48,51], [48,53], [49,51], [49,52], [50,48], [51,49], [51,50], [52,48], [52,49]]; // "Two-glider mess"
+seed = [[49,49], [50,48], [50,49], [50,50], [51,50]]; // "R-pentomino"
+//seed = [[47,51], [48,51], [48,53], [49,51], [49,52], [50,48], [51,49], [51,50], [52,48], [52,49]]; // "Two-glider mess"
 //seed = [[47,50], [48,50], [49,50], [50,50], [51,50], [52,50], [53,50]]; // Becomes a "Honey farm"
 //seed = [[,], [,], [,], [,], [,], [,]]; // Template
 
@@ -69,14 +68,14 @@ seed = [[47,51], [48,51], [48,53], [49,51], [49,52], [50,48], [51,49], [51,50], 
  * @return gameBoard Handle for the internal 2d array that handles live and dead cells
  */
 function setUpGameBoard(onLoad=true) {
-	if (onLoad) {
+	if(onLoad) {
 		// Get audio ready
 		audio = new Audio("SmoothMcGroove_Zelda_DekuPalace.mp3");
 		// Connect vars to the DOM
 		htmlCanvasElement = document.getElementById("board");
 		drawSpace = htmlCanvasElement.getContext("2d");
 		// Give user play/pause functionality (space bar and canvas click)
-		document.onkeydown = function(key) { if (key.keyCode == 32) playPause(); };
+		document.onkeydown = function(key) { if(key.keyCode == 32) playPause(); };
 		htmlCanvasElement.addEventListener("click", playPause);
 		// Set play speed
 		delay = 1000 - (speed*10);
@@ -118,7 +117,7 @@ function pauseButton() {
  * Handle the "Mute/Unmute" button.
  */
 function muteButton() {
-	if (isMuted) {
+	if(isMuted) {
 		audio.muted = false; 
 		isMuted = false;
 	}
@@ -132,7 +131,7 @@ function muteButton() {
  * Used by event listeners to either play or pause.
  */
 function playPause() {
-	if (isPaused)
+	if(isPaused)
 		playButton();
 	else
 		pauseButton();
@@ -157,35 +156,36 @@ function transitionBoard() {
  * the current cell has. As a side benefit, updateCanvas only has to redraw -1's and 2's.
  */
 function transformBoard() {
-	for(col=0; col<boardDim; col++) {
-		for(row=0; row<boardDim; row++) {
+	for(let col=0; col<boardDim; col++) {
+		for(let row=0; row<boardDim; row++) {
 			/// Count the live neighbors ///
-			liveNeighbors = 0;
-			for(i=col-1; i<col+2; i++) {
-				for(j=row-1; j<row+2; j++) {
-					if(i<0 || j<0 || i>=boardDim || j>=boardDim || (i==col&&j==row)) {
+			numLiveNeighbors = 0;
+			for(let i=col-1; i<col+2; i++) {
+				for(let j=row-1; j<row+2; j++) {
+					if(i<0 || j<0 || i>=boardDim || j>=boardDim || (i==col && j==row)) {
 						// This square is either outside the board or is the current square, 
 						// so skip it
 					}
 					else {
 						if(gameBoard[i][j]==1 || gameBoard[i][j]==-1) {
-							liveNeighbors ++;
+							numLiveNeighbors ++;
 						}
 					}
 				}
 			}
 			currentCell = gameBoard[col][row];
 			/// Rule 1 ///
-			if((currentCell==1||currentCell==-1) && liveNeighbors<2) {
+			if((currentCell==1 || currentCell==-1) && numLiveNeighbors<2) {
 				gameBoard[col][row] = -1;
 			}
+			/// Rule 2 ///
 			// Rule 2 needs no transformation
 			/// Rule 3 ///
-			if((currentCell==1||currentCell==-1) && liveNeighbors>3) {
+			if((currentCell==1 || currentCell==-1) && numLiveNeighbors>3) {
 				gameBoard[col][row] = -1;
 			}
 			/// Rule 4 ///
-			if((currentCell==0||currentCell==2) && liveNeighbors==3) {
+			if((currentCell==0 || currentCell==2) && numLiveNeighbors==3) {
 				gameBoard[col][row] = 2;
 			}
 		}
@@ -199,20 +199,20 @@ function transformBoard() {
  * corresponding square on drawSpace, and changes the cell to 1.
  */
 function updateCanvas() {
-	for(col=5; col<boardDim-5; col++) {
-		for(row=5; row<boardDim-5; row++) {
-			var x = (col-5) * pixelsPerSide;
-			var y = (row-5) * pixelsPerSide;
+	for(col=0; col<boardDim; col++) {
+		for(row=0; row<boardDim; row++) {
+			let x = (col-5) * pixelsPerSide;
+			let y = (row-5) * pixelsPerSide;
 			if(gameBoard[col][row]==2) {
 				// Draw a black square on the board, then set the value to 1
-				drawSpace.fillRect(x,y,pixelsPerSide,pixelsPerSide);
+				drawSpace.fillStyle = "#000000";
+				drawSpace.fillRect(x, y, pixelsPerSide, pixelsPerSide);
 				gameBoard[col][row] = 1;
 			}
 			if(gameBoard[col][row]==-1) {
 				// Draw a white square on the board, then set the value to 0
 				drawSpace.fillStyle = "#FFFFFF";
-				drawSpace.fillRect(x,y,pixelsPerSide,pixelsPerSide);
-				drawSpace.fillStyle = "#000000";
+				drawSpace.fillRect(x, y, pixelsPerSide, pixelsPerSide);
 				gameBoard[col][row] = 0;
 			}
 			// else gameBoard[col][row] == 0 or 1, so take no action
@@ -229,7 +229,7 @@ function updateCanvas() {
 function setSpeed() {
 	pauseButton();
 	speed = prompt("Enter the speed factor \n(a number between 0 and 100)", 80);
-	if (speed.isNaN) {
+	if(speed.isNaN || speed < 0 || speed > 100) {
 		alert("Invalid input (speed is unchanged)");
 	}
 	else {
@@ -243,27 +243,25 @@ function setSpeed() {
  * Clears the board, then creates and draws a random seed.
  */
 function randomizeBoard() {
-	var sparcityFactor = confirm("This action will reset your game. Is that ok?");
-	if (!sparcityFactor)
+	let density = confirm("This action will reset your game. Is that ok?");
+	if(!density)
 		return;
-	sparcityFactor = prompt("How dense would you like the live cells?\n(enter a percentage between 0 and 100)", 20);
-	if (sparcityFactor.isNaN) {
+	density = prompt("How dense would you like the live cells?\n(enter a percentage between 0 and 100)", 20);
+	if(density.isNaN || density < 0 || density > 100) {
 		alert("Invalid input (the board is unchanged)");
 		return;
 	}
-	// Transform sparcityFactor from a percentage to a scalar
-	sparcityFactor /= 100;
+	// Transform density from a percentage to a scalar
+	density /= 100;
 	// Clear the board
-	for(i=0; i<boardDim; i++) {
-		gameBoard[i] = new Array(boardDim);
-		for(j=0; j<boardDim; j++) 
+	for(let i=0; i<boardDim; i++) {
+		for(let j=0; j<boardDim; j++) 
 			gameBoard[i][j] = -1;
 	}
 	// This is where the magic happens
 	for(col=0; col<boardDim; col++) {
 		for(row=0; row<boardDim; row++) {
-			var toMakeLive = Math.random();
-			if (toMakeLive < sparcityFactor)
+			if(Math.random() < density)
 				gameBoard[col][row] = 2;
 		}
 	}
